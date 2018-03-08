@@ -68,8 +68,8 @@ public class SearchPresenterImpl extends BasePresenterImpl<ISearchView> implemen
         //搜索引擎初始化
         searchBook = new SearchBook(new SearchBook.OnSearchListener() {
             @Override
-            public void refreshSearchBook(List<SearchBookBean> value) {
-                mView.refreshSearchBook(value);
+            public void refreshSearchBook() {
+                mView.refreshSearchBook();
             }
 
             @Override
@@ -208,7 +208,7 @@ public class SearchPresenterImpl extends BasePresenterImpl<ISearchView> implemen
 
     @Override
     public void initPage() {
-        searchBook.setPage(1);
+        searchBook.setPage(0);
     }
 
     @Override

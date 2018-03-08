@@ -23,6 +23,7 @@ import com.monke.monkeybook.help.RxBusTag;
 import com.monke.monkeybook.model.WebBookModelImpl;
 import com.monke.monkeybook.presenter.impl.IBookDetailPresenter;
 import com.monke.monkeybook.view.impl.IBookDetailView;
+import com.monke.monkeybook.widget.contentswitchview.BookContentView;
 import com.trello.rxlifecycle2.android.ActivityEvent;
 
 import java.util.ArrayList;
@@ -56,23 +57,15 @@ public class BookDetailPresenterImpl extends BasePresenterImpl<IBookDetailView> 
             searchBook.setNoteUrl(bookShelf.getNoteUrl());
             searchBook.setTag(bookShelf.getTag());
         } else {
-            searchBook = intent.getParcelableExtra("data");
-            inBookShelf = searchBook.getIsAdd();
-            bookShelf = new BookShelfBean();
-            bookShelf.setNoteUrl(searchBook.getNoteUrl());
-            bookShelf.setFinalDate(System.currentTimeMillis());
-            bookShelf.setDurChapter(0);
-            bookShelf.setDurChapterPage(0);
-            bookShelf.setTag(searchBook.getTag());
-            BookInfoBean bookInfo = new BookInfoBean();
-            bookInfo.setNoteUrl(searchBook.getNoteUrl());
-            bookInfo.setAuthor(searchBook.getAuthor());
-            bookInfo.setCoverUrl(searchBook.getCoverUrl());
-            bookInfo.setName(searchBook.getName());
-            bookInfo.setTag(searchBook.getTag());
-            bookInfo.setOrigin(searchBook.getOrigin());
-            bookShelf.setBookInfoBean(bookInfo);
+            initBookFormSearch(intent.getParcelableExtra("data"));
         }
+    }
+
+    @Override
+    public void initBookFormSearch(SearchBookBean searchBookBean) {
+        searchBook = searchBookBean;
+        inBookShelf = searchBookBean.getIsAdd();
+        bookShelf = BookShelf.getBookFromSearchBook(searchBookBean);
     }
 
     public Boolean getInBookShelf() {
@@ -195,6 +188,59 @@ public class BookDetailPresenterImpl extends BasePresenterImpl<IBookDetailView> 
                         }
                     });
         }
+    }
+
+    @Override
+    public void changeBookSource(SearchBookBean searchBookBean) {
+        BookShelfBean bookShelfBean = BookShelf.getBookFromSearchBook(searchBookBean);
+        WebBookModelImpl.getInstance().getBookInfo(bookShelfBean)
+                .flatMap(bookShelfBean1 -> WebBookModelImpl.getInstance().getChapterList(bookShelfBean1))
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new SimpleObserver<BookShelfBean>() {
+                    @Override
+                    public void onNext(BookShelfBean bookShelfBean) {
+                        if (bookShelf.getDurChapter() > bookShelfBean.getChapterListSize() - 1) {
+                            bookShelfBean.setDurChapter(bookShelfBean.getChapterListSize() - 1);
+                        } else {
+                            bookShelfBean.setDurChapter(bookShelf.getDurChapter());
+                        }
+                        saveChangedBook(bookShelfBean);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        mView.updateView();
+                        Toast.makeText(MApplication.getInstance(), "换源失败！" + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    private void saveChangedBook(BookShelfBean bookShelfBean) {
+        Observable.create((ObservableOnSubscribe<BookShelfBean>) e -> {
+            BookShelf.removeFromBookShelf(bookShelf);
+            BookShelf.saveBookToShelf(bookShelfBean);
+            e.onNext(bookShelfBean);
+            e.onComplete();
+        })
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new SimpleObserver<BookShelfBean>() {
+                    @Override
+                    public void onNext(BookShelfBean value) {
+                        RxBus.get().post(RxBusTag.HAD_REMOVE_BOOK, bookShelf);
+                        RxBus.get().post(RxBusTag.HAD_ADD_BOOK, value);
+                        bookShelf = value;
+                        mView.updateView();
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        e.printStackTrace();
+                        mView.updateView();
+                        Toast.makeText(MApplication.getInstance(), e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     @Override

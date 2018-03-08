@@ -6,7 +6,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.PorterDuff;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.design.widget.NavigationView;
@@ -34,6 +33,7 @@ import com.monke.monkeybook.R;
 import com.monke.monkeybook.base.MBaseActivity;
 import com.monke.monkeybook.bean.BookShelfBean;
 import com.monke.monkeybook.dao.DbHelper;
+import com.monke.monkeybook.help.LauncherIcon;
 import com.monke.monkeybook.model.BookSourceManage;
 import com.monke.monkeybook.presenter.BookDetailPresenterImpl;
 import com.monke.monkeybook.presenter.MainPresenterImpl;
@@ -208,6 +208,9 @@ public class MainActivity extends MBaseActivity<IMainPresenter> implements IMain
                 editor.apply();
                 recreate();
                 break;
+            case R.id.action_change_icon:
+                LauncherIcon.Change();
+                break;
             case R.id.action_clear_content:
                 clearContent();
                 break;
@@ -331,6 +334,11 @@ public class MainActivity extends MBaseActivity<IMainPresenter> implements IMain
         }
     }
 
+    @AfterPermissionGranted(BACKUP_RESULT)
+    private void backupResult() {
+        backup();
+    }
+
     //恢复
     private void restore() {
         if (EasyPermissions.hasPermissions(this, perms)) {
@@ -345,6 +353,11 @@ public class MainActivity extends MBaseActivity<IMainPresenter> implements IMain
             EasyPermissions.requestPermissions(this, getString(R.string.restore_permission),
                     RESTORE_RESULT, perms);
         }
+    }
+
+    @AfterPermissionGranted(RESTORE_RESULT)
+    private void restoreResult() {
+        restore();
     }
 
     private void bindRvShelfEvent() {
@@ -437,20 +450,15 @@ public class MainActivity extends MBaseActivity<IMainPresenter> implements IMain
     }
 
     @Override
+    public SharedPreferences getPreferences() {
+        return preferences;
+    }
+
+    @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         // Forward results to EasyPermissions
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this);
-    }
-
-    @AfterPermissionGranted(BACKUP_RESULT)
-    private void backupResult() {
-        backup();
-    }
-
-    @AfterPermissionGranted(RESTORE_RESULT)
-    private void restoreResult() {
-        restore();
     }
 
     @Override

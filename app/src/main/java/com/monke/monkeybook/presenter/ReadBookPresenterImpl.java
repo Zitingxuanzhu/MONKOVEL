@@ -1,14 +1,12 @@
 //Copyright (c) 2017. 章钦豪. All rights reserved.
 package com.monke.monkeybook.presenter;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Build;
 import android.provider.MediaStore;
 import android.text.Layout;
 import android.text.StaticLayout;
@@ -39,7 +37,6 @@ import com.monke.monkeybook.model.ReplaceRuleManage;
 import com.monke.monkeybook.model.WebBookModelImpl;
 import com.monke.monkeybook.presenter.impl.IReadBookPresenter;
 import com.monke.monkeybook.service.DownloadService;
-import com.monke.monkeybook.utils.PremissionCheck;
 import com.monke.monkeybook.view.impl.IReadBookView;
 import com.monke.monkeybook.widget.contentswitchview.BookContentView;
 import com.trello.rxlifecycle2.android.ActivityEvent;
@@ -93,14 +90,7 @@ public class ReadBookPresenterImpl extends BasePresenterImpl<IReadBookView> impl
             }
             checkInShelf();
         } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !PremissionCheck.checkPremission(activity,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                //申请权限
-                activity.requestPermissions(
-                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 0x11);
-            } else {
-                openBookFromOther(activity);
-            }
+            mView.openBookFromOther();
         }
     }
 
@@ -116,6 +106,7 @@ public class ReadBookPresenterImpl extends BasePresenterImpl<IReadBookView> impl
             if (null != bookShelf.getChapterList(chapterIndex).getBookContentBean()
                     && null != bookShelf.getChapterList(chapterIndex).getBookContentBean().getDurChapterContent()) {
                 if (bookShelf.getChapterList(chapterIndex).getBookContentBean().getLineSize() == mView.getPaint().getTextSize()
+                        && bookShelf.getChapterList(chapterIndex).getBookContentBean().getLineContent() != null
                         && bookShelf.getChapterList(chapterIndex).getBookContentBean().getLineContent().size() > 0) {
                     //已有数据
                     int tempCount = (int) Math.ceil(bookShelf.getChapterList(chapterIndex)
@@ -317,6 +308,28 @@ public class ReadBookPresenterImpl extends BasePresenterImpl<IReadBookView> impl
             if (!content.startsWith(bookShelf.getChapterList(chapterIndex).getDurChapterName())) {
                 content = String.format("%s\r\n%s", bookShelf.getChapterList(chapterIndex).getDurChapterName(), paragraphStr);
             }
+            String allLine[] = content.split("\r\n\u3000\u3000");
+            //替换
+            if (ReplaceRuleManage.getEnabled() != null && ReplaceRuleManage.getEnabled().size() > 0) {
+                StringBuilder contentBuilder = new StringBuilder();
+                for (String line : allLine) {
+                    for (ReplaceRuleBean replaceRule : ReplaceRuleManage.getEnabled()) {
+                        try {
+                            line = line.replaceAll(replaceRule.getRegex(), replaceRule.getReplacement());
+                        } catch (Exception e1) {
+                            e1.printStackTrace();
+                        }
+                    }
+                    if (line.length() > 0) {
+                        if (contentBuilder.length() == 0) {
+                            contentBuilder.append(line);
+                        } else {
+                            contentBuilder.append("\r\n").append("\u3000\u3000").append(line);
+                        }
+                    }
+                }
+                content = contentBuilder.toString();
+            }
             TextPaint mPaint = (TextPaint) mView.getPaint();
             mPaint.setSubpixelText(true);
             Layout tempLayout = new StaticLayout(content, mPaint, pageWidth, Layout.Alignment.ALIGN_NORMAL, 0, 0, false);
@@ -346,7 +359,7 @@ public class ReadBookPresenterImpl extends BasePresenterImpl<IReadBookView> impl
         mView.showLoading("文本导入中...");
         getRealFilePath(activity, uri)
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribeOn(Schedulers.newThread())
+                .subscribeOn(Schedulers.io())
                 .subscribe(new SimpleObserver<String>() {
                     @Override
                     public void onNext(String value) {
@@ -400,23 +413,10 @@ public class ReadBookPresenterImpl extends BasePresenterImpl<IReadBookView> impl
      */
     @Override
     public void changeBookSource(SearchBookBean searchBook) {
-        BookShelfBean bookShelfBean = new BookShelfBean();
-        bookShelfBean.setTag(searchBook.getTag());
-        bookShelfBean.setNoteUrl(searchBook.getNoteUrl());
-        bookShelfBean.setFinalDate(System.currentTimeMillis());
-        bookShelfBean.setDurChapter(0);
-        bookShelfBean.setDurChapterPage(0);
-        BookInfoBean bookInfo = new BookInfoBean();
-        bookInfo.setNoteUrl(searchBook.getNoteUrl());
-        bookInfo.setAuthor(searchBook.getAuthor());
-        bookInfo.setCoverUrl(searchBook.getCoverUrl());
-        bookInfo.setName(searchBook.getName());
-        bookInfo.setTag(searchBook.getTag());
-        bookInfo.setOrigin(searchBook.getOrigin());
-        bookShelfBean.setBookInfoBean(bookInfo);
+        BookShelfBean bookShelfBean = BookShelf.getBookFromSearchBook(searchBook);
         WebBookModelImpl.getInstance().getBookInfo(bookShelfBean)
                 .flatMap(bookShelfBean1 -> WebBookModelImpl.getInstance().getChapterList(bookShelfBean1))
-                .subscribeOn(Schedulers.newThread())
+                .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(new SimpleObserver<BookShelfBean>() {
                     @Override
@@ -447,13 +447,15 @@ public class ReadBookPresenterImpl extends BasePresenterImpl<IReadBookView> impl
             e.onNext(bookShelfBean);
             e.onComplete();
         })
-                .subscribeOn(Schedulers.newThread())
+                .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(new SimpleObserver<BookShelfBean>() {
                     @Override
                     public void onNext(BookShelfBean value) {
-                        bookShelf = value;
+                        RxBus.get().post(RxBusTag.HAD_REMOVE_BOOK, bookShelf);
                         RxBus.get().post(RxBusTag.HAD_ADD_BOOK, value);
+                        bookShelf = value;
+                        mView.initChapterList();
                         mView.getCsvBook().setInitData(bookShelf.getDurChapter(),
                                 bookShelf.getChapterListSize(),
                                 BookContentView.DurPageIndexBegin);
@@ -465,7 +467,7 @@ public class ReadBookPresenterImpl extends BasePresenterImpl<IReadBookView> impl
                         mView.getCsvBook().setInitData(bookShelf.getDurChapter(),
                                 bookShelf.getChapterListSize(),
                                 bookShelf.getDurChapterPage());
-                        Toast.makeText(MApplication.getInstance(), "换源失败！", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MApplication.getInstance(), e.getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 });
     }

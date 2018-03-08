@@ -428,8 +428,8 @@ public class SearchActivity extends MBaseActivity<ISearchPresenter> implements I
     }
 
     @Override
-    public void refreshSearchBook(List<SearchBookBean> books) {
-        searchBookAdapter.replaceAll(books);
+    public void refreshSearchBook() {
+        searchBookAdapter.clearAll();
     }
 
     @Override
@@ -447,7 +447,6 @@ public class SearchActivity extends MBaseActivity<ISearchPresenter> implements I
         if (isRefresh) {
             rfRvSearchBooks.refreshError();
         } else {
-
             rfRvSearchBooks.loadMoreError();
         }
     }
@@ -482,7 +481,7 @@ public class SearchActivity extends MBaseActivity<ISearchPresenter> implements I
     public void updateSearchItem(int index) {
         if (index < searchBookAdapter.getItemcount()) {
             int startIndex = ((LinearLayoutManager) rfRvSearchBooks.getRecyclerView().getLayoutManager()).findFirstVisibleItemPosition();
-            TextView tvAddShelf = rfRvSearchBooks.getRecyclerView().getChildAt(index - startIndex).findViewById(R.id.tv_addshelf);
+            TextView tvAddShelf = rfRvSearchBooks.getRecyclerView().getChildAt(index - startIndex).findViewById(R.id.tv_add_shelf);
             if (tvAddShelf != null) {
                 if (searchBookAdapter.getSearchBooks().get(index).getIsAdd()) {
                     tvAddShelf.setText("已添加");

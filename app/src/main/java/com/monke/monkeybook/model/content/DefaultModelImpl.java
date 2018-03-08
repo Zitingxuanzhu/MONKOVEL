@@ -26,6 +26,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import io.reactivex.Observable;
 import retrofit2.Response;
@@ -39,6 +40,7 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
     private String TAG;
     private String name;
     private BookSourceBean bookSourceBean;
+    private Map<String, String> headerMap = AnalyzeHeaders.getMap(null);
 
     private DefaultModelImpl(String tag) {
         TAG = tag;
@@ -62,6 +64,7 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
             if (bookSourceBeans != null && bookSourceBeans.size() > 0) {
                 bookSourceBean = bookSourceBeans.get(0);
                 name = bookSourceBean.getBookSourceName();
+                headerMap = AnalyzeHeaders.getMap(bookSourceBean.getHttpUserAgent());
                 return true;
             } else {
                 return false;
@@ -76,7 +79,7 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
      */
     @Override
     public Observable<List<SearchBookBean>> searchBook(String content, int page) {
-        if (!initBookSourceBean()) {
+        if (!initBookSourceBean() || isEmpty(bookSourceBean.getRuleSearchUrl())) {
             return Observable.create(emitter -> {
                 emitter.onNext(new ArrayList<>());
                 emitter.onComplete();
@@ -92,14 +95,18 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
                 });
             }
             if (isPost) {
-                return getRetrofitString(MApplication.getInstance(), analyzeSearchUrl.getSearchUrl())
+                return getRetrofitString(analyzeSearchUrl.getSearchUrl())
                         .create(IHttpPostApi.class)
-                        .searchBook(analyzeSearchUrl.getSearchPath(), analyzeSearchUrl.getQueryMap())
+                        .searchBook(analyzeSearchUrl.getSearchPath(),
+                                analyzeSearchUrl.getQueryMap(),
+                                headerMap)
                         .flatMap(this::analyzeSearchBook);
             } else {
-                return getRetrofitString(MApplication.getInstance(), analyzeSearchUrl.getSearchUrl())
+                return getRetrofitString(analyzeSearchUrl.getSearchUrl())
                         .create(IHttpGetApi.class)
-                        .searchBook(analyzeSearchUrl.getSearchPath(), analyzeSearchUrl.getQueryMap())
+                        .searchBook(analyzeSearchUrl.getSearchPath(),
+                                analyzeSearchUrl.getQueryMap(),
+                                headerMap)
                         .flatMap(this::analyzeSearchBook);
             }
         } catch (Exception e) {
@@ -163,9 +170,9 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
         if (!initBookSourceBean()) {
             return Observable.error(new Throwable(String.format("无法找到源%s", TAG)));
         }
-        return getRetrofitString(MApplication.getInstance(), TAG)
+        return getRetrofitString(TAG)
                 .create(IHttpGetApi.class)
-                .getWebContent(bookShelfBean.getNoteUrl().replace(TAG, ""))
+                .getWebContent(bookShelfBean.getNoteUrl(), headerMap)
                 .flatMap(s -> analyzeBookInfo(s, bookShelfBean));
     }
 
@@ -187,7 +194,7 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
                 bookInfoBean.setName(analyzeRule.getResult(bookSourceBean.getRuleBookName()));
             }
             if (isEmpty(bookInfoBean.getAuthor())) {
-                bookInfoBean.setAuthor(analyzeRule.getResult(bookSourceBean.getRuleBookAuthor()));
+                bookInfoBean.setAuthor(FormatWebText.getAuthor(analyzeRule.getResult(bookSourceBean.getRuleBookAuthor())));
             }
             bookInfoBean.setIntroduce(analyzeRule.getResult(bookSourceBean.getRuleIntroduce()));
             String chapterUrl = analyzeRule.getResult(bookSourceBean.getRuleChapterUrl());
@@ -215,9 +222,9 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
                 emitter.onComplete();
             });
         }
-        return getRetrofitString(MApplication.getInstance(), TAG)
+        return getRetrofitString(TAG)
                 .create(IHttpGetApi.class)
-                .getWebContent(bookShelfBean.getBookInfoBean().getChapterUrl().replace(TAG, ""))
+                .getWebContent(bookShelfBean.getBookInfoBean().getChapterUrl(), headerMap)
                 .flatMap(s -> analyzeChapterList(s, bookShelfBean));
     }
 
@@ -266,9 +273,9 @@ public class DefaultModelImpl extends BaseModelImpl implements IStationBookModel
                 emitter.onComplete();
             });
         }
-        return getRetrofitString(MApplication.getInstance(), TAG)
+        return getRetrofitString(TAG)
                 .create(IHttpGetApi.class)
-                .getWebContent(durChapterUrl.replace(TAG, ""))
+                .getWebContent(durChapterUrl, headerMap)
                 .flatMap(s -> analyzeBookContent(s, durChapterUrl, durChapterIndex));
     }
 

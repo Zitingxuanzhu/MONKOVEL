@@ -1,6 +1,8 @@
 package com.monke.monkeybook.view.activity;
 
+import android.Manifest;
 import android.content.Intent;
+import android.support.annotation.NonNull;
 import android.support.v7.app.ActionBar;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -27,6 +29,8 @@ import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import pub.devrel.easypermissions.AfterPermissionGranted;
+import pub.devrel.easypermissions.EasyPermissions;
 
 /**
  * Created by GKF on 2017/12/16.
@@ -36,6 +40,7 @@ import butterknife.ButterKnife;
 public class BookSourceActivity extends MBaseActivity<IBookSourcePresenter> implements IBookSourceView {
     public static final int EDIT_SOURCE = 101;
     public static final int IMPORT_SOURCE = 102;
+    public static final int RESULT_IMPORT_PERMS = 103;
 
     @BindView(R.id.toolbar)
     Toolbar toolbar;
@@ -44,9 +49,9 @@ public class BookSourceActivity extends MBaseActivity<IBookSourcePresenter> impl
     @BindView(R.id.recycler_view)
     RecyclerView recyclerView;
 
+    private String[] perms = {Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
     private boolean selectAll = true;
     private Animation animIn;
-    private Animation animOut;
     private BookSourceAdapter adapter;
     ItemTouchHelper.Callback callback = new ItemTouchHelper.Callback() {
         @Override
@@ -110,7 +115,6 @@ public class BookSourceActivity extends MBaseActivity<IBookSourcePresenter> impl
     @Override
     protected void initData() {
         animIn = AnimationUtils.loadAnimation(this, R.anim.anim_act_importbook_in);
-        animOut = AnimationUtils.loadAnimation(this, R.anim.anim_act_importbook_out);
     }
 
     private void initRecyclerView() {
@@ -126,9 +130,19 @@ public class BookSourceActivity extends MBaseActivity<IBookSourcePresenter> impl
         adapter.resetDataS(BookSourceManage.saveBookSourceToDb());
     }
 
+    public void upDateSelectAll() {
+        selectAll = true;
+        for (BookSourceBean bookSourceBean : adapter.getBookSourceBeanList()) {
+            if (!bookSourceBean.getEnable()) {
+                selectAll = false;
+                break;
+            }
+        }
+    }
+
     private void selectAllDataS() {
         for (BookSourceBean bookSourceBean : adapter.getBookSourceBeanList()) {
-            bookSourceBean.setEnable(selectAll);
+            bookSourceBean.setEnable(!selectAll);
         }
         adapter.notifyDataSetChanged();
         selectAll = !selectAll;
@@ -208,10 +222,27 @@ public class BookSourceActivity extends MBaseActivity<IBookSourcePresenter> impl
     }
 
     private void selectBookSourceFile() {
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-        intent.setType("text/plain");//设置类型，我这里是任意类型，任意后缀的可以这样写。
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        startActivityForResult(intent, IMPORT_SOURCE);
+        if (EasyPermissions.hasPermissions(this, perms)) {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("text/plain");//设置类型，我这里是任意类型，任意后缀的可以这样写。
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(intent, IMPORT_SOURCE);
+        } else {
+            EasyPermissions.requestPermissions(this, getString(R.string.import_book_source),
+                    RESULT_IMPORT_PERMS, perms);
+        }
+    }
+
+    @AfterPermissionGranted(RESULT_IMPORT_PERMS)
+    private void resultImportPerms() {
+        selectBookSourceFile();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        // Forward results to EasyPermissions
+        EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this);
     }
 
     @Override
@@ -223,7 +254,9 @@ public class BookSourceActivity extends MBaseActivity<IBookSourcePresenter> impl
                     refreshBookSource();
                     break;
                 case IMPORT_SOURCE:
-                    mPresenter.importBookSource(data.getData());
+                    if (data != null) {
+                        mPresenter.importBookSource(data.getData());
+                    }
                     break;
             }
         }

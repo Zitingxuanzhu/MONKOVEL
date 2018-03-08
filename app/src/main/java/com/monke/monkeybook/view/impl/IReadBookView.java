@@ -39,6 +39,8 @@ public interface IReadBookView extends IView {
 
     void initPop();
 
+    void initChapterList();
+
     void loadLocationBookError();
 
     void showOnLineView();
@@ -48,4 +50,6 @@ public interface IReadBookView extends IView {
     void showLoading(String msg);
 
     void dismissLoading();
+
+    void openBookFromOther();
 }

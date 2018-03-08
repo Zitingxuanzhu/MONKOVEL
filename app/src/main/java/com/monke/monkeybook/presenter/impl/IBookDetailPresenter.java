@@ -15,9 +15,13 @@ public interface IBookDetailPresenter extends IPresenter{
 
     Boolean getInBookShelf();
 
+    void initBookFormSearch(SearchBookBean searchBookBean);
+
     void getBookShelfInfo();
 
     void addToBookShelf();
 
     void removeFromBookShelf();
+
+    void changeBookSource(SearchBookBean searchBookBean);
 }
